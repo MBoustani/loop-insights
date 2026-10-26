@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 
 import openai
 from fastapi import HTTPException
 from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
 
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
 
@@ -35,13 +38,14 @@ def explain(report):
 
     facts = to_facts(report)
     try:
-        response = openai.OpenAI().responses.parse(
+        response = openai.OpenAI(timeout=60).responses.parse(  # don't wait forever
             model=MODEL,
             instructions=INSTRUCTIONS,
             input=json.dumps(facts),
             text_format=Insight,
         )
-    except openai.OpenAIError:
+    except openai.OpenAIError as e:
+        log.warning("OpenAI request failed: %s", type(e).__name__)
         raise HTTPException(502, "The LLM request failed")
 
     if response.output_parsed is None:  # refusal

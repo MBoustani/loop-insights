@@ -8,7 +8,7 @@ MAX_AGE_SECONDS = 3600  # reuse saved data for 1 hour
 
 
 def connect():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)  # wait if another request is writing
     conn.execute("""
         CREATE TABLE IF NOT EXISTS queries (
             repo TEXT,

@@ -1,9 +1,11 @@
+import logging
 import os
 
 import httpx
 from fastapi import HTTPException
 
 API_URL = "https://api.github.com"
+log = logging.getLogger(__name__)
 
 MAX_PAGES = 10  # search returns at most 1000 results (10 pages of 100)
 
@@ -43,7 +45,8 @@ def _client():
 def _get(client, path, params):
     try:
         resp = client.get(path, params=params)
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        log.warning("GitHub request %s failed: %s", path, type(e).__name__)
         raise HTTPException(502, "Could not reach GitHub")
     # search answers 422 when the repo doesn't exist or isn't visible
     if resp.status_code in (404, 422):
@@ -51,5 +54,6 @@ def _get(client, path, params):
     if resp.status_code in (403, 429) and resp.headers.get("x-ratelimit-remaining") == "0":
         raise HTTPException(503, "GitHub rate limit reached, try again in a few minutes")
     if resp.status_code != 200:
+        log.warning("GitHub returned HTTP %s for %s", resp.status_code, path)
         raise HTTPException(502, f"GitHub returned HTTP {resp.status_code}")
     return resp.json()

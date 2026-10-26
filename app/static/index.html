@@ -122,9 +122,15 @@ async function loadMetrics() {
   setStatus("Loading metrics... (big repos can take a while)");
   setButtonsDisabled(true);
 
-  const res = await fetch(url("review-load"));
-  const m = await res.json();
-  setButtonsDisabled(false);
+  let res, m;
+  try {
+    res = await fetch(url("review-load"));
+    m = await res.json();
+  } catch {
+    return setStatus("Could not reach the server, or it sent an unexpected answer.", true);
+  } finally {
+    setButtonsDisabled(false);
+  }
   if (!res.ok) return setStatus(`Error ${res.status}: ${m.detail}`, true);
   setStatus(m.complete ? "" : "Note: more than 1,000 PRs in this period, so only the first 1,000 were used.");
 
@@ -157,9 +163,15 @@ async function explain() {
   setStatus("Asking the AI...");
   setButtonsDisabled(true);
 
-  const res = await fetch(url("review-load/narrative"));
-  const data = await res.json();
-  setButtonsDisabled(false);
+  let res, data;
+  try {
+    res = await fetch(url("review-load/narrative"));
+    data = await res.json();
+  } catch {
+    return setStatus("Could not reach the server, or it sent an unexpected answer.", true);
+  } finally {
+    setButtonsDisabled(false);
+  }
   if (!res.ok) return setStatus(`Error ${res.status}: ${data.detail}`, true);
   setStatus("");
 

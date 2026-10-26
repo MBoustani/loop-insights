@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path as FilePath
@@ -6,6 +7,8 @@ from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import FileResponse
 
 from app import db, github, metrics, narrative
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="Review Load Insights")
 
@@ -62,6 +65,11 @@ def review_load_narrative(owner: str = Owner, repo: str = Repo, since: date | No
         db.save_narrative(name, report["since"], report["until"], explanation)
 
     return {"narrative": explanation, "metrics": report}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
 
 
 @app.get("/v1/history")
