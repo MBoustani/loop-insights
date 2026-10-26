@@ -27,7 +27,7 @@ so install 3.12 from python.org first.
 Other options:
 - Docker: `docker build -t loop-insights .` then
   `docker run -p 8000:8000 -e GITHUB_TOKEN -e OPENAI_API_KEY loop-insights`
-- Tests: `python -m pytest` (no network or keys needed)
+- Tests: `pip install -r requirements-dev.txt`, then `python -m pytest` (no network or keys needed)
 - Optional env vars: `OPENAI_MODEL` (default `gpt-5.6`), `DB_PATH` (default `queries.sqlite3`)
 
 ## API
