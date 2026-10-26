@@ -66,10 +66,11 @@ def review_load_narrative(owner: str, repo: str, since: date | None = None, unti
 
     # same repo + dates explained in the last hour? reuse that answer, no OpenAI call
     name = report["repo"].lower()
-    explanation = db.find("narrative", name, report["since"], report["until"])
+    kind = f"narrative:{narrative.MODEL}"  # switching models gives a fresh answer
+    explanation = db.find(kind, name, report["since"], report["until"])
     if explanation is None:
         explanation = narrative.explain(report)
-        db.save("narrative", name, report["since"], report["until"], explanation)
+        db.save(kind, name, report["since"], report["until"], explanation)
 
     return {"narrative": explanation, "metrics": report}
 
