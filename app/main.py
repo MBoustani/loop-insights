@@ -5,9 +5,6 @@ from fastapi import FastAPI, HTTPException, Path
 
 from app import github, metrics, narrative
 
-if not os.environ.get("GITHUB_TOKEN"):
-    raise RuntimeError("GITHUB_TOKEN is not set - see README")
-
 app = FastAPI(title="Review Load Insights")
 
 Owner = Path(pattern=r"^[A-Za-z0-9-]{1,39}$")
@@ -15,6 +12,9 @@ Repo = Path(pattern=r"^[A-Za-z0-9._-]{1,100}$")
 
 
 def build_report(owner, repo, since, until):
+    if not os.environ.get("GITHUB_TOKEN"):
+        raise HTTPException(503, "GITHUB_TOKEN is not set - see README")
+
     today = datetime.now(timezone.utc).date()
     until = until or today
     since = since or until - timedelta(days=29)  # last 30 days
