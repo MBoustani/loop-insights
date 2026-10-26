@@ -12,8 +12,9 @@ def compute(prs, top_n=10):
     unreviewed = 0
 
     for pr in prs:
-        created = _parse(pr["created_at"])
-        hours_to_merge.append(_hours(created, _parse(pr["merged_at"])))
+        created = datetime.fromisoformat(pr["created_at"])
+        merged = datetime.fromisoformat(pr["merged_at"])
+        hours_to_merge.append((merged - created).total_seconds() / 3600)
         merged_by[pr["author"]] += 1
 
         # authors replying on their own PR show up as reviews, skip those
@@ -22,8 +23,8 @@ def compute(prs, top_n=10):
             unreviewed += 1
             continue
 
-        first_review = min(_parse(r["submitted_at"]) for r in peer_reviews)
-        hours_to_first_review.append(_hours(created, first_review))
+        first_review = min(datetime.fromisoformat(r["submitted_at"]) for r in peer_reviews)
+        hours_to_first_review.append((first_review - created).total_seconds() / 3600)
         for r in peer_reviews:
             reviews_by[r["author"]] += 1
             if r["state"] == "APPROVED":
@@ -37,10 +38,10 @@ def compute(prs, top_n=10):
         "total_reviews": total_reviews,
         "unique_reviewers": len(reviews_by),
         "unreviewed_prs": unreviewed,
-        "unreviewed_share": _share(unreviewed, len(prs)),
-        "median_hours_to_merge": _median(hours_to_merge),
-        "median_hours_to_first_review": _median(hours_to_first_review),
-        "top_reviewer_share": _share(top_reviewers[0][1], total_reviews) if top_reviewers else None,
+        "unreviewed_share": round(unreviewed / len(prs), 3) if prs else None,
+        "median_hours_to_merge": round(median(hours_to_merge), 1) if hours_to_merge else None,
+        "median_hours_to_first_review": round(median(hours_to_first_review), 1) if hours_to_first_review else None,
+        "top_reviewer_share": round(top_reviewers[0][1] / total_reviews, 3) if top_reviewers else None,
         "top_reviewers": [
             {"login": login, "reviews": count, "approvals": approvals_by[login]}
             for login, count in top_reviewers
@@ -50,19 +51,3 @@ def compute(prs, top_n=10):
             for login, count in merged_by.most_common(top_n)
         ],
     }
-
-
-def _parse(timestamp):
-    return datetime.fromisoformat(timestamp)
-
-
-def _hours(start, end):
-    return (end - start).total_seconds() / 3600
-
-
-def _median(values):
-    return round(median(values), 1) if values else None
-
-
-def _share(part, whole):
-    return round(part / whole, 3) if whole else None
