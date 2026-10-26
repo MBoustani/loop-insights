@@ -23,7 +23,8 @@ def get_merged_prs(owner, repo, since, until):
             prs.append({
                 "author": item["user"]["login"] if item["user"] else "ghost",
                 "created_at": item["created_at"],
-                "merged_at": item["pull_request"]["merged_at"],
+                # a merged PR is closed at the moment it is merged, so closed_at is a safe fallback
+                "merged_at": item["pull_request"].get("merged_at") or item["closed_at"],
                 "reviews": [
                     {"author": r["user"]["login"], "state": r["state"], "submitted_at": r["submitted_at"]}
                     for r in reviews
@@ -47,6 +48,8 @@ def _get(client, path, params):
     # search answers 422 when the repo doesn't exist or isn't visible
     if resp.status_code in (404, 422):
         raise HTTPException(404, "Repository not found")
+    if resp.status_code in (403, 429) and resp.headers.get("x-ratelimit-remaining") == "0":
+        raise HTTPException(503, "GitHub rate limit reached, try again in a few minutes")
     if resp.status_code != 200:
         raise HTTPException(502, f"GitHub returned HTTP {resp.status_code}")
     return resp.json()
