@@ -1,9 +1,9 @@
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path as FilePath
 
-from fastapi import FastAPI, HTTPException, Path
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from app import db, github, metrics, narrative
@@ -12,11 +12,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 app = FastAPI(title="Review Load Insights")
 
-Owner = Path(pattern=r"^[A-Za-z0-9-]{1,39}$")
-Repo = Path(pattern=r"^[A-Za-z0-9._-]{1,100}$")
-
 
 def build_report(owner, repo, since, until):
+    # only the characters GitHub allows in names, so input can't change the GitHub URL or search
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,39}", owner) or not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", repo):
+        raise HTTPException(422, "Invalid repository name. Use owner/name, for example fastapi/fastapi.")
     if not os.environ.get("GITHUB_TOKEN"):
         raise HTTPException(503, "GITHUB_TOKEN is not set - see README")
 
@@ -54,12 +54,12 @@ def build_report(owner, repo, since, until):
 
 
 @app.get("/v1/repos/{owner}/{repo}/review-load")
-def review_load(owner: str = Owner, repo: str = Repo, since: date | None = None, until: date | None = None):
+def review_load(owner: str, repo: str, since: date | None = None, until: date | None = None):
     return build_report(owner, repo, since, until)
 
 
 @app.get("/v1/repos/{owner}/{repo}/review-load/narrative")
-def review_load_narrative(owner: str = Owner, repo: str = Repo, since: date | None = None, until: date | None = None):
+def review_load_narrative(owner: str, repo: str, since: date | None = None, until: date | None = None):
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(503, "Narrative is disabled: OPENAI_API_KEY is not set")
     report = build_report(owner, repo, since, until)
@@ -86,4 +86,4 @@ def history():
 
 @app.get("/", include_in_schema=False)
 def ui():
-    return FileResponse(FilePath(__file__).parent / "static" / "index.html")
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
