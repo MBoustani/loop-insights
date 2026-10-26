@@ -28,6 +28,7 @@ Other options:
 - Docker: `docker build -t loop-insights .` then
   `docker run -p 8000:8000 -e GITHUB_TOKEN -e OPENAI_API_KEY loop-insights`
 - Tests: `pip install -r requirements-dev.txt`, then `python -m pytest` (no network or keys needed)
+- Evals for the LLM narrative: `python -m evals.run_evals` (needs `OPENAI_API_KEY`, see below)
 - Optional env vars: `OPENAI_MODEL` (default `gpt-5.6`), `DB_PATH` (default `queries.sqlite3`)
 
 ## API
@@ -74,6 +75,7 @@ app/metrics.py    the math (pure function, tested)
 app/narrative.py  OpenAI call + evidence check (tested)
 app/db.py         SQLite cache and search history
 app/static/       a single HTML page
+evals/            eval suite for the LLM narrative
 ```
 
 A request is validated, then checked against a SQLite cache (same repo and dates in the last
@@ -89,6 +91,20 @@ Security: tokens only come from env vars and are never logged, repo names are ch
 GitHub's naming rules before being used in a URL or search, SQL is parameterized, and the page
 only uses `textContent`.
 
+## Evals
+
+`python -m evals.run_evals` runs the narrative against four fixed scenarios: one reviewer doing
+most of the reviews, lots of PRs merged without review, only 2 PRs, and a healthy repo. Every
+answer must have a summary, cite 2-6 real facts and no made-up ones, and every number in the
+summary has to actually be in our data. Each case also has its own checks: point at the top
+reviewer, keep confidence low with only 2 PRs, don't call a healthy repo a bottleneck. It prints
+PASS/FAIL per check and exits non-zero if anything fails, so it's what I'd run before changing
+the prompt or switching models (`OPENAI_MODEL=... python -m evals.run_evals` to compare).
+
+The checks are plain code, not another LLM grading the answer, so they're cheap and repeatable.
+The downside is that they can't judge how good the writing is. `tests/test_evals.py` checks
+the checks themselves offline.
+
 ## Trade-offs
 
 - REST over GraphQL because it's easier to read. The cost is one call per PR for reviews, so a
@@ -103,14 +119,15 @@ only uses `textContent`.
 ## Extras
 
 The web page (date picker, search history, repo info card with a GitHub link), the SQLite cache
-for both GitHub data and LLM answers, tests, a Dockerfile, and a health check.
+for both GitHub data and LLM answers, tests, an eval suite for the narrative, a Dockerfile, and
+a health check.
 
 ## What I'd do next
 
 - Store PRs and reviews in their own tables with a background sync, so any date range is
   answered from the database (or switch to GraphQL to cut the number of calls).
-- A small eval set for the narrative: fixed inputs with checks to run before changing the
-  prompt or the model.
+- Run each eval case a few times and track the pass rate over time, and add an LLM-graded check
+  for how useful the explanation actually is.
 - Weekly trends and an option to filter out bots.
 - More tests around input validation and the GitHub client.
 
