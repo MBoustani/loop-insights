@@ -49,7 +49,7 @@
     <button onclick="loadMetrics()">Load metrics</button>
     <button onclick="explain()">Explain with AI</button>
   </div>
-  <p id="status">Empty dates = last 30 days.</p>
+  <p id="status">Pick a repo and both dates.</p>
 
   <div id="ai" class="ai" hidden>
     <h2>AI explanation</h2>
@@ -85,13 +85,19 @@ function setButtonsDisabled(disabled) {
   document.querySelectorAll("button").forEach((b) => (b.disabled = disabled));
 }
 
+function datesMissing() {
+  const since = document.getElementById("since").value;
+  const until = document.getElementById("until").value;
+  if (since && until) return false;
+  setStatus("Please select both a Since and an Until date.", true);
+  return true;
+}
+
 function url(endpoint) {
   const repo = document.getElementById("repo").value.trim();
   const params = new URLSearchParams();
-  const since = document.getElementById("since").value;
-  const until = document.getElementById("until").value;
-  if (since) params.set("since", since);
-  if (until) params.set("until", until);
+  params.set("since", document.getElementById("since").value);
+  params.set("until", document.getElementById("until").value);
   return `/v1/repos/${repo}/${endpoint}?${params}`;
 }
 
@@ -112,6 +118,7 @@ function table(rows, columns) {
 }
 
 async function loadMetrics() {
+  if (datesMissing()) return;
   setStatus("Loading metrics... (big repos can take a while)");
   setButtonsDisabled(true);
 
@@ -146,6 +153,7 @@ async function loadMetrics() {
 }
 
 async function explain() {
+  if (datesMissing()) return;
   setStatus("Asking the AI...");
   setButtonsDisabled(true);
 
