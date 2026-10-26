@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Load Insights</title>
+<style>
+  body { font-family: system-ui, sans-serif; color: #222; max-width: 1150px; margin: 24px auto; padding: 0 16px; }
+  h1 { margin-bottom: 4px; }
+  .subtitle { color: #666; margin-top: 0; }
+  .layout { display: flex; flex-wrap: wrap; gap: 32px; }
+  aside { width: 220px; border-right: 1px solid #e5e5e5; padding-right: 16px; }
+  aside ul { list-style: none; padding: 0; }
+  aside li { margin-bottom: 10px; }
+  aside a { font-weight: 600; text-decoration: none; color: #0b63ce; }
+  aside small { color: #777; }
+  main { flex: 1; min-width: 300px; }
+  .form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  label { display: flex; flex-direction: column; font-size: 13px; color: #555; gap: 3px; }
+  input, button { font: inherit; padding: 5px 8px; }
+  button { cursor: pointer; }
+  #status { color: #666; }
+  #status.error { color: #c62828; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .stat { border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px 12px; min-width: 130px; }
+  .stat b { display: block; font-size: 20px; }
+  .stat span { font-size: 12px; color: #666; }
+  .ai { border-left: 4px solid #0b63ce; background: #f5f8fd; padding: 4px 16px 12px; margin-bottom: 24px; }
+  table { border-collapse: collapse; margin-bottom: 16px; }
+  td { border-bottom: 1px solid #e5e5e5; padding: 5px 12px 5px 0; }
+  tr:first-child td { font-weight: 600; color: #555; }
+</style>
+</head>
+<body>
+<h1>Review Load Insights</h1>
+<p class="subtitle">Who does the code reviews in a GitHub repo, and is it slowing pull requests down?</p>
+
+<div class="layout">
+<aside>
+  <h3>History</h3>
+  <ul id="history"></ul>
+</aside>
+
+<main>
+  <div class="form">
+    <label>Repository <input id="repo" value="fastapi/fastapi"></label>
+    <label>Since <input id="since" type="date"></label>
+    <label>Until <input id="until" type="date"></label>
+    <button onclick="loadMetrics()">Load metrics</button>
+    <button onclick="explain()">Explain with AI</button>
+  </div>
+  <p id="status">Empty dates = last 30 days.</p>
+
+  <div id="ai" class="ai" hidden>
+    <h2>AI explanation</h2>
+    <p id="ai-summary"></p>
+    <p><b>Hypothesis:</b> <span id="ai-hypothesis"></span></p>
+    <p><b>Confidence:</b> <span id="ai-confidence"></span></p>
+    <h3>Evidence (values from our data)</h3>
+    <div id="ai-evidence"></div>
+  </div>
+
+  <div id="metrics" hidden>
+    <h2 id="metrics-title">Metrics</h2>
+    <div id="metrics-stats" class="stats"></div>
+    <h3>Top reviewers</h3>
+    <div id="metrics-reviewers"></div>
+    <h3>Top authors</h3>
+    <div id="metrics-authors"></div>
+  </div>
+</main>
+</div>
+
+<script>
+const percent = (x) => (x == null ? "-" : `${Math.round(x * 100)}%`);
+const hours = (x) => (x == null ? "-" : `${x} h`);
+
+function setStatus(text, isError = false) {
+  const status = document.getElementById("status");
+  status.textContent = text;
+  status.className = isError ? "error" : "";
+}
+
+function setButtonsDisabled(disabled) {
+  document.querySelectorAll("button").forEach((b) => (b.disabled = disabled));
+}
+
+function url(endpoint) {
+  const repo = document.getElementById("repo").value.trim();
+  const params = new URLSearchParams();
+  const since = document.getElementById("since").value;
+  const until = document.getElementById("until").value;
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
+  return `/v1/repos/${repo}/${endpoint}?${params}`;
+}
+
+// builds a table; columns is a list of [header, key]. textContent only, so data can't inject HTML
+function table(rows, columns) {
+  const t = document.createElement("table");
+  if (rows.length === 0) {
+    t.insertRow().insertCell().textContent = "No data.";
+    return t;
+  }
+  const header = t.insertRow();
+  columns.forEach(([title]) => (header.insertCell().textContent = title));
+  rows.forEach((row) => {
+    const tr = t.insertRow();
+    columns.forEach(([, key]) => (tr.insertCell().textContent = row[key] ?? "-"));
+  });
+  return t;
+}
+
+async function loadMetrics() {
+  setStatus("Loading metrics... (big repos can take a while)");
+  setButtonsDisabled(true);
+
+  const res = await fetch(url("review-load"));
+  const m = await res.json();
+  setButtonsDisabled(false);
+  if (!res.ok) return setStatus(`Error ${res.status}: ${m.detail}`, true);
+  setStatus(m.complete ? "" : "Note: more than 1,000 PRs in this period, so only the first 1,000 were used.");
+
+  document.getElementById("metrics-title").textContent = `Metrics: ${m.repo}, ${m.since} to ${m.until}`;
+  const stats = [
+    [m.merged_prs, "merged PRs"],
+    [m.total_reviews, "reviews"],
+    [percent(m.unreviewed_share), "merged without review"],
+    [hours(m.median_hours_to_first_review), "median wait for 1st review"],
+    [hours(m.median_hours_to_merge), "median time to merge"],
+    [percent(m.top_reviewer_share), "reviews by the top reviewer"],
+  ];
+  document.getElementById("metrics-stats").replaceChildren(...stats.map(([value, label]) => {
+    const box = document.createElement("div");
+    box.className = "stat";
+    box.append(Object.assign(document.createElement("b"), { textContent: value ?? "-" }));
+    box.append(Object.assign(document.createElement("span"), { textContent: label }));
+    return box;
+  }));
+  document.getElementById("metrics-reviewers").replaceChildren(
+    table(m.top_reviewers, [["Reviewer", "login"], ["Reviews", "reviews"], ["Approvals", "approvals"]]));
+  document.getElementById("metrics-authors").replaceChildren(
+    table(m.top_authors, [["Author", "login"], ["Merged PRs", "merged_prs"]]));
+  document.getElementById("metrics").hidden = false;
+  loadHistory();
+}
+
+async function explain() {
+  setStatus("Asking the AI...");
+  setButtonsDisabled(true);
+
+  const res = await fetch(url("review-load/narrative"));
+  const data = await res.json();
+  setButtonsDisabled(false);
+  if (!res.ok) return setStatus(`Error ${res.status}: ${data.detail}`, true);
+  setStatus("");
+
+  const n = data.narrative;
+  document.getElementById("ai-summary").textContent = n.summary;
+  document.getElementById("ai-hypothesis").textContent = n.hypothesis ?? "none";
+  document.getElementById("ai-confidence").textContent = percent(n.confidence);
+  document.getElementById("ai-evidence").replaceChildren(
+    table(n.evidence, [["Fact", "fact"], ["Value", "value"], ["Why", "why"]]));
+  document.getElementById("ai").hidden = false;
+  loadHistory();
+}
+
+// past searches, newest first; click one to run it again (it comes from the cache)
+async function loadHistory() {
+  const res = await fetch("/v1/history");
+  const queries = await res.json();
+  const list = document.getElementById("history");
+  list.replaceChildren();
+  if (queries.length === 0) list.textContent = "No searches yet.";
+
+  queries.forEach((q) => {
+    const link = document.createElement("a");
+    link.href = "#";
+    link.textContent = q.repo;
+    link.onclick = () => {
+      document.getElementById("repo").value = q.repo;
+      document.getElementById("since").value = q.since;
+      document.getElementById("until").value = q.until;
+      loadMetrics();
+      return false;
+    };
+    const dates = document.createElement("small");
+    dates.textContent = `${q.since} to ${q.until}`;
+    const item = document.createElement("li");
+    item.append(link, document.createElement("br"), dates);
+    list.append(item);
+  });
+}
+
+loadHistory();
+</script>
+</body>
+</html>

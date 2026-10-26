@@ -1,7 +1,9 @@
 import os
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path as FilePath
 
 from fastapi import FastAPI, HTTPException, Path
+from fastapi.responses import FileResponse
 
 from app import db, github, metrics, narrative
 
@@ -57,3 +59,8 @@ def review_load_narrative(owner: str = Owner, repo: str = Repo, since: date | No
 @app.get("/v1/history")
 def history():
     return db.history()
+
+
+@app.get("/", include_in_schema=False)
+def ui():
+    return FileResponse(FilePath(__file__).parent / "static" / "index.html")
