@@ -35,12 +35,12 @@ def build_report(owner, repo, since, until):
 
     # same repo + dates asked in the last hour? use the saved data instead of calling GitHub
     name = f"{owner}/{repo}".lower()
-    data = db.find(name, since, until)
+    data = db.find("github", name, since, until)
     if data is None:
         repo_info = github.get_repo_info(owner, repo)  # also gives a clean 404 for unknown or private repos
         data = github.get_merged_prs(owner, repo, since, until)
         data["repo_info"] = repo_info
-        db.save(name, since, until, data)
+        db.save("github", name, since, until, data)
 
     report = {
         "repo": f"{owner}/{repo}",
@@ -66,10 +66,10 @@ def review_load_narrative(owner: str, repo: str, since: date | None = None, unti
 
     # same repo + dates explained in the last hour? reuse that answer, no OpenAI call
     name = report["repo"].lower()
-    explanation = db.find_narrative(name, report["since"], report["until"])
+    explanation = db.find("narrative", name, report["since"], report["until"])
     if explanation is None:
         explanation = narrative.explain(report)
-        db.save_narrative(name, report["since"], report["until"], explanation)
+        db.save("narrative", name, report["since"], report["until"], explanation)
 
     return {"narrative": explanation, "metrics": report}
 
