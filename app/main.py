@@ -21,8 +21,11 @@ def build_report(owner, repo, since, until):
         raise HTTPException(503, "GITHUB_TOKEN is not set - see README")
 
     today = datetime.now(timezone.utc).date()
-    until = until or today
-    since = since or until - timedelta(days=29)  # last 30 days
+    if until is None:
+        until = today
+    if since is None:
+        since = until - timedelta(days=29)  # last 30 days
+
     if since > until:
         raise HTTPException(422, "'since' must be on or before 'until'")
     if until > today:
@@ -39,14 +42,15 @@ def build_report(owner, repo, since, until):
         data["repo_info"] = repo_info
         db.save(name, since, until, data)
 
-    return {
+    report = {
         "repo": f"{owner}/{repo}",
         "since": since,
         "until": until,
         "complete": data["complete"],
         "repo_info": data.get("repo_info"),
-        **metrics.compute(data["prs"]),
     }
+    report.update(metrics.compute(data["prs"]))
+    return report
 
 
 @app.get("/v1/repos/{owner}/{repo}/review-load")
