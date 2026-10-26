@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Path
 
-from app import github, metrics
+from app import github, metrics, narrative
 
 if not os.environ.get("GITHUB_TOKEN"):
     raise RuntimeError("GITHUB_TOKEN is not set - see README")
@@ -39,3 +39,11 @@ def build_report(owner, repo, since, until):
 @app.get("/v1/repos/{owner}/{repo}/review-load")
 def review_load(owner: str = Owner, repo: str = Repo, since: date | None = None, until: date | None = None):
     return build_report(owner, repo, since, until)
+
+
+@app.get("/v1/repos/{owner}/{repo}/review-load/narrative")
+def review_load_narrative(owner: str = Owner, repo: str = Repo, since: date | None = None, until: date | None = None):
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise HTTPException(503, "Narrative is disabled: OPENAI_API_KEY is not set")
+    report = build_report(owner, repo, since, until)
+    return {"narrative": narrative.explain(report), "metrics": report}
