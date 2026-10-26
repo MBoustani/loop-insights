@@ -1,18 +1,14 @@
-"""Small eval suite for the LLM narrative. Run it before changing the prompt or the model:
-
-    OPENAI_API_KEY=... python -m evals.run_evals
-
-Each case is a fixed set of metrics plus things a good answer must (or must not) do.
-It calls the real model through the same code the app uses, so it costs a few cents, and
-answers can vary a little between runs.
-"""
 import os
 import re
 import sys
+from datetime import date
 
 from fastapi import HTTPException
 
-from app import narrative
+from app import github, metrics, narrative
+
+# one case on real data: the same repo as the demo, for a fixed past month so it stays stable
+REAL_REPO = ("fastapi", "fastapi", date(2026, 9, 1), date(2026, 9, 30))
 
 
 def report(**changes):
@@ -72,6 +68,14 @@ CASES = [
 ]
 
 
+def real_data_case():
+    # same path as the app: GitHub -> metrics (no cache, so it always uses fresh data)
+    owner, repo, since, until = REAL_REPO
+    data = github.get_merged_prs(owner, repo, since, until)
+    report = {"repo": f"{owner}/{repo}", "complete": data["complete"], **metrics.compute(data["prs"])}
+    return {"name": f"real data: {owner}/{repo}, {since} to {until}", "report": report}
+
+
 def numbers_match_data(summary, facts):
     """Every number in the summary must be one of our facts (as is, or as a percentage)."""
     values = [float(v) for v in facts.values()]
@@ -108,7 +112,17 @@ def main():
         sys.exit("Set OPENAI_API_KEY first.")
     print(f"Model: {narrative.MODEL}")
     failed = 0
-    for case in CASES:
+    cases = list(CASES)
+    if os.environ.get("GITHUB_TOKEN"):
+        try:
+            cases.append(real_data_case())
+        except HTTPException as e:
+            print(f"\nFAIL  could not load the real-data case: {e.detail}")
+            failed += 1
+    else:
+        print("GITHUB_TOKEN not set, skipping the real-data case")
+
+    for case in cases:
         print(f"\n{case['name']}")
         try:
             answer = narrative.explain(case["report"])

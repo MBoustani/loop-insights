@@ -28,7 +28,7 @@ Other options:
 - Docker: `docker build -t loop-insights .` then
   `docker run -p 8000:8000 -e GITHUB_TOKEN -e OPENAI_API_KEY loop-insights`
 - Tests: `pip install -r requirements-dev.txt`, then `python -m pytest` (no network or keys needed)
-- Evals for the LLM narrative: `python -m evals.run_evals` (needs `OPENAI_API_KEY`, see below)
+- Evals for the LLM narrative: `python -m evals.run_evals` (needs `OPENAI_API_KEY` and `GITHUB_TOKEN`, see below)
 - Optional env vars: `OPENAI_MODEL` (default `gpt-5.6`), `DB_PATH` (default `queries.sqlite3`)
 
 ## API
@@ -94,7 +94,9 @@ only uses `textContent`.
 ## Evals
 
 `python -m evals.run_evals` runs the narrative against four fixed scenarios: one reviewer doing
-most of the reviews, lots of PRs merged without review, only 2 PRs, and a healthy repo. Every
+most of the reviews, lots of PRs merged without review, only 2 PRs, and a healthy repo, plus one
+case on real data from `fastapi/fastapi` for September 2026 (a fixed past month, so it stays
+stable; skipped if `GITHUB_TOKEN` isn't set). Every
 answer must have a summary, cite 2-6 real facts and no made-up ones, and every number in the
 summary has to actually be in our data. Each case also has its own checks: point at the top
 reviewer, keep confidence low with only 2 PRs, don't call a healthy repo a bottleneck. It prints
