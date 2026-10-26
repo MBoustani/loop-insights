@@ -53,7 +53,15 @@ def review_load_narrative(owner: str = Owner, repo: str = Repo, since: date | No
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(503, "Narrative is disabled: OPENAI_API_KEY is not set")
     report = build_report(owner, repo, since, until)
-    return {"narrative": narrative.explain(report), "metrics": report}
+
+    # same repo + dates explained in the last hour? reuse that answer, no OpenAI call
+    name = report["repo"].lower()
+    explanation = db.find_narrative(name, report["since"], report["until"])
+    if explanation is None:
+        explanation = narrative.explain(report)
+        db.save_narrative(name, report["since"], report["until"], explanation)
+
+    return {"narrative": explanation, "metrics": report}
 
 
 @app.get("/v1/history")
