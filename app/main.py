@@ -34,7 +34,9 @@ def build_report(owner, repo, since, until):
     name = f"{owner}/{repo}".lower()
     data = db.find(name, since, until)
     if data is None:
+        repo_info = github.get_repo_info(owner, repo)  # also gives a clean 404 for unknown or private repos
         data = github.get_merged_prs(owner, repo, since, until)
+        data["repo_info"] = repo_info
         db.save(name, since, until, data)
 
     return {
@@ -42,6 +44,7 @@ def build_report(owner, repo, since, until):
         "since": since,
         "until": until,
         "complete": data["complete"],
+        "repo_info": data.get("repo_info"),
         **metrics.compute(data["prs"]),
     }
 

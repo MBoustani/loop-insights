@@ -9,6 +9,26 @@ log = logging.getLogger(__name__)
 
 MAX_PAGES = 10  # search returns at most 1000 results (10 pages of 100)
 
+NOT_FOUND = "Repository not found. Check the name, or it may be private (only public repos can be read)."
+
+
+def get_repo_info(owner, repo):
+    with _client() as client:
+        r = _get(client, f"/repos/{owner}/{repo}", {})
+    return {
+        "full_name": r["full_name"],
+        "description": r["description"],
+        "url": r["html_url"],
+        "stars": r["stargazers_count"],
+        "forks": r["forks_count"],
+        "open_issues_and_prs": r["open_issues_count"],  # GitHub counts open PRs as issues here
+        "language": r["language"],
+        "created_at": r["created_at"],
+        "last_push": r["pushed_at"],
+        "archived": r["archived"],
+    }
+
+
 def get_merged_prs(owner, repo, since, until):
     with _client() as client:
         query = f"repo:{owner}/{repo} is:pr is:merged merged:{since}..{until}"
@@ -48,9 +68,9 @@ def _get(client, path, params):
     except httpx.HTTPError as e:
         log.warning("GitHub request %s failed: %s", path, type(e).__name__)
         raise HTTPException(502, "Could not reach GitHub")
-    # search answers 422 when the repo doesn't exist or isn't visible
+    # GitHub answers 404 (and search answers 422) for repos that don't exist or are private
     if resp.status_code in (404, 422):
-        raise HTTPException(404, "Repository not found")
+        raise HTTPException(404, NOT_FOUND)
     if resp.status_code in (403, 429) and resp.headers.get("x-ratelimit-remaining") == "0":
         raise HTTPException(503, "GitHub rate limit reached, try again in a few minutes")
     if resp.status_code != 200:

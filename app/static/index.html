@@ -25,6 +25,9 @@
   .stat { border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px 12px; min-width: 130px; }
   .stat b { display: block; font-size: 20px; }
   .stat span { font-size: 12px; color: #666; }
+  .repo { border: 1px solid #e5e5e5; border-radius: 6px; padding: 4px 16px 10px; margin-bottom: 20px; }
+  .repo p { margin: 6px 0; }
+  .muted { color: #666; }
   .ai { border-left: 4px solid #0b63ce; background: #f5f8fd; padding: 4px 16px 12px; margin-bottom: 24px; }
   table { border-collapse: collapse; margin-bottom: 16px; }
   td { border-bottom: 1px solid #e5e5e5; padding: 5px 12px 5px 0; }
@@ -61,7 +64,9 @@
   </div>
 
   <div id="metrics" hidden>
+    <div id="repo-card" class="repo" hidden></div>
     <h2 id="metrics-title">Metrics</h2>
+    <p id="no-prs" class="muted" hidden>No pull requests were merged in this period, so there are no review numbers yet. Try a longer period.</p>
     <div id="metrics-stats" class="stats"></div>
     <h3>Top reviewers</h3>
     <div id="metrics-reviewers"></div>
@@ -83,6 +88,11 @@ function setStatus(text, isError = false) {
 
 function setButtonsDisabled(disabled) {
   document.querySelectorAll("button").forEach((b) => (b.disabled = disabled));
+}
+
+// FastAPI sends a list for invalid input (e.g. a bad repo name); our own errors are plain text
+function errorText(detail) {
+  return typeof detail === "string" ? detail : "Invalid input: check the repository name (owner/name) and the dates.";
 }
 
 function datesMissing() {
@@ -131,9 +141,11 @@ async function loadMetrics() {
   } finally {
     setButtonsDisabled(false);
   }
-  if (!res.ok) return setStatus(`Error ${res.status}: ${m.detail}`, true);
+  if (!res.ok) return setStatus(errorText(m.detail), true);
   setStatus(m.complete ? "" : "Note: more than 1,000 PRs in this period, so only the first 1,000 were used.");
 
+  showRepoInfo(m.repo_info);
+  document.getElementById("no-prs").hidden = m.merged_prs > 0;
   document.getElementById("metrics-title").textContent = `Metrics: ${m.repo}, ${m.since} to ${m.until}`;
   const stats = [
     [m.merged_prs, "merged PRs"],
@@ -158,6 +170,38 @@ async function loadMetrics() {
   loadHistory();
 }
 
+// basic facts about the repo, with a link that opens it on GitHub in a new tab
+function showRepoInfo(info) {
+  const card = document.getElementById("repo-card");
+  card.hidden = !info;
+  if (!info) return;
+
+  const link = document.createElement("a");
+  link.textContent = `${info.full_name} ↗`;
+  if (info.url.startsWith("https://github.com/")) link.href = info.url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  const title = document.createElement("h2");
+  title.append(link);
+
+  const description = document.createElement("p");
+  description.textContent = info.description || "No description.";
+
+  const facts = document.createElement("p");
+  facts.className = "muted";
+  facts.textContent = [
+    `★ ${info.stars.toLocaleString()} stars`,
+    `${info.forks.toLocaleString()} forks`,
+    info.language || "no main language",
+    `${info.open_issues_and_prs.toLocaleString()} open issues and PRs`,
+    `created ${info.created_at.slice(0, 10)}`,
+    `last push ${info.last_push.slice(0, 10)}`,
+    info.archived ? "archived (read-only)" : null,
+  ].filter(Boolean).join(" · ");
+
+  card.replaceChildren(title, description, facts);
+}
+
 async function explain() {
   if (datesMissing()) return;
   setStatus("Asking the AI...");
@@ -172,7 +216,7 @@ async function explain() {
   } finally {
     setButtonsDisabled(false);
   }
-  if (!res.ok) return setStatus(`Error ${res.status}: ${data.detail}`, true);
+  if (!res.ok) return setStatus(errorText(data.detail), true);
   setStatus("");
 
   const n = data.narrative;
